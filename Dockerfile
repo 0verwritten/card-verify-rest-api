@@ -1,23 +1,30 @@
-############################
-# STEP 1 build executable binary
-############################
 FROM golang:alpine AS builder
-# Install git.
-# Git is required for fetching the dependencies.
-RUN apk update && apk add --no-cache git
+
+ENV USER=appuser
+ENV UID=10001
+
+# See https://stackoverflow.com/a/55757473/12429735RUN
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    "${USER}"
 
 WORKDIR $GOPATH/src/mypackage/myapp/
 COPY . .
-# Fetch dependencies.
-# Using go get.
 RUN go get -d -v
-# Build the binary.
 RUN go build -o /go/bin/hello
-############################
-# STEP 2 build a small image
-############################
+
 FROM scratch
-# Copy our static executable.
+
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
 COPY --from=builder /go/bin/hello /go/bin/hello
-# Run the hello binary.
+
+USER appuser:appuser
+
 ENTRYPOINT ["/go/bin/hello"]
