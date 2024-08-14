@@ -1,16 +1,15 @@
-package main
+package services
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
+	"math/rand"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
 // luhnCheck validates a credit card number using the Luhn algorithm.
-func luhnCheck(cardNumber string) bool {
+func LuhnCheck(cardNumber string) bool {
 	sum := 0
 	alternate := false
 
@@ -32,7 +31,7 @@ func luhnCheck(cardNumber string) bool {
 }
 
 // getCardVendor identifies the card vendor based on the IIN/BIN.
-func getCardVendor(cardNumber string) string {
+func GetCardVendor(cardNumber string) string {
 	if len(cardNumber) < 4 {
 		return "Unknown"
 	}
@@ -69,8 +68,64 @@ func getCardVendor(cardNumber string) string {
 	}
 }
 
+// generateCardNumber generates a random valid credit card number.
+func GenerateCardNumber() string {
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	// Generate a random 15-digit number
+	num := rand.Intn(900000000000000) + 100000000000000
+
+	// Convert the number to a string
+	cardNumber := strconv.Itoa(num)
+
+	// Add a random check digit using the Luhn algorithm
+	checkDigit := GenerateCheckDigit(cardNumber)
+	cardNumber += strconv.Itoa(checkDigit)
+
+	// Format the card number with spaces
+	formattedCardNumber := FormatCardNumber(cardNumber)
+
+	return formattedCardNumber
+}
+
+// generateCheckDigit generates a random check digit using the Luhn algorithm.
+func GenerateCheckDigit(cardNumber string) int {
+	sum := 0
+	alternate := false
+
+	// Iterate over the card number from right to left
+	for i := len(cardNumber) - 1; i >= 0; i-- {
+		n := int(cardNumber[i] - '0')
+
+		if alternate {
+			n *= 2
+			if n > 9 {
+				n -= 9
+			}
+		}
+		sum += n
+		alternate = !alternate
+	}
+
+	checkDigit := (sum * 9) % 10
+
+	return checkDigit
+}
+
+// formatCardNumber formats the card number with spaces every 4 digits.
+func FormatCardNumber(cardNumber string) string {
+	var formatted strings.Builder
+	for i, r := range cardNumber {
+		formatted.WriteRune(r)
+		if (i+1)%4 == 0 && i != len(cardNumber)-1 {
+			formatted.WriteRune(' ')
+		}
+	}
+	return formatted.String()
+}
+
 // cleanCardNumber removes any spaces or non-numeric characters from the card number.
-func cleanCardNumber(cardNumber string) string {
+func CleanCardNumber(cardNumber string) string {
 	var cleaned strings.Builder
 	for _, r := range cardNumber {
 		if unicode.IsDigit(r) {
@@ -78,56 +133,4 @@ func cleanCardNumber(cardNumber string) string {
 		}
 	}
 	return cleaned.String()
-}
-
-func homePage(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hi, this is the Card Verification Service!\n")
-	fmt.Fprintf(w, "Please provide a credit card number to verify.\n")
-	fmt.Fprintf(w, "Example: http://localhost:8888/verify?card=4539 1488 0343 6467\n")
-}
-
-func verifyPage(w http.ResponseWriter, r *http.Request) {
-	cardNumber := r.URL.Query().Get("card")
-	cleanedCardNumber := cleanCardNumber(cardNumber)
-
-	type Response struct {
-		Valid  bool   `json:"valid"`
-		Vendor string `json:"vendor"`
-	}
-
-	var response Response
-
-	if !luhnCheck(cleanedCardNumber) {
-		response.Valid = false
-	} else {
-		response.Valid = true
-		response.Vendor = getCardVendor(cleanedCardNumber)
-	}
-
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonResponse)
-}
-
-func handleRequests() {
-	serverUrl := ""
-	serverPort := "8888"
-	if serverUrl == "" {
-		serverUrl = fmt.Sprintf("%s:%s", serverUrl, serverPort)
-	}
-
-	println("Server is started on " + serverUrl)
-	http.HandleFunc("/", homePage)
-	http.HandleFunc("/verify", verifyPage)
-	log.Fatal(http.ListenAndServe(serverUrl, nil))
-}
-
-func main() {
-	println("Starting Card Verification Service!")
-	handleRequests()
 }
